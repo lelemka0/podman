@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -159,6 +160,14 @@ func appendSubPaths(dirs []string, path string, isUserFlag bool, filterPtr func(
 		return dirs
 	}
 
+	if info, _ := os.Stat(resolvedPath); !info.IsDir() {
+		return dirs
+	}
+	if slices.Contains(dirs, resolvedPath) {
+		Logf("path %q duplicate, loop file tree?", resolvedPath)
+		return dirs
+	}
+
 	err = filepath.WalkDir(resolvedPath, func(_path string, info os.DirEntry, err error) error {
 		// Ignore drop-in directory subpaths
 		if !strings.HasSuffix(_path, ".d") {
@@ -166,6 +175,8 @@ func appendSubPaths(dirs []string, path string, isUserFlag bool, filterPtr func(
 				if filterPtr == nil || filterPtr(_path, isUserFlag) {
 					dirs = append(dirs, _path)
 				}
+			} else if info.Type()&os.ModeSymlink == os.ModeSymlink {
+				dirs = appendSubPaths(dirs, _path, isUserFlag, filterPtr)
 			}
 		}
 		return err
