@@ -34,10 +34,6 @@ var (
 	versionFlag bool // True if -version is used
 )
 
-const (
-	SystemUserDirLevel = 5
-)
-
 var (
 	// data saved between logToKmsg calls
 	noKmsg   = false
@@ -182,10 +178,24 @@ func appendSubPaths(dirs []string, path string, isUserFlag bool, filterPtr func(
 	return dirs
 }
 
+func locateUserDir(_path string) string {
+	UnitDirAdminUser := filepath.Join(quadlet.UnitDirAdmin, "users")
+	resolvedUnitDirAdmin, err := filepath.EvalSymlinks(UnitDirAdminUser)
+	if err != nil {
+		Debugf("Error occurred resolving path %q: %s", UnitDirAdminUser, err)
+		resolvedUnitDirAdmin = UnitDirAdminUser
+	}
+	if strings.HasPrefix(_path, resolvedUnitDirAdmin) {
+		return resolvedUnitDirAdmin
+	}
+	return ""
+}
+
 func nonNumericFilter(_path string, isUserFlag bool) bool {
 	// when running in rootless, recursive walk directories that are non numeric
 	// ignore sub dirs under the `users` directory which correspond to a user id
-	if strings.Contains(_path, filepath.Join(quadlet.UnitDirAdmin, "users")) {
+	if userDir := locateUserDir(_path); userDir != "" {
+		SystemUserDirLevel := len(strings.Split(userDir, string(os.PathSeparator)))
 		listDirUserPathLevels := strings.Split(_path, string(os.PathSeparator))
 		if len(listDirUserPathLevels) > SystemUserDirLevel {
 			if !(regexp.MustCompile(`^[0-9]*$`).MatchString(listDirUserPathLevels[SystemUserDirLevel])) {
@@ -201,7 +211,7 @@ func nonNumericFilter(_path string, isUserFlag bool) bool {
 func userLevelFilter(_path string, isUserFlag bool) bool {
 	// if quadlet generator is run rootless, do not recurse other user sub dirs
 	// if quadlet generator is run as root, ignore users sub dirs
-	if strings.Contains(_path, filepath.Join(quadlet.UnitDirAdmin, "users")) {
+	if locateUserDir(_path) != "" {
 		if isUserFlag {
 			return true
 		}
